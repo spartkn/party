@@ -1,0 +1,259 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="#0d1815"/><g fill="#3fbf9b"><rect x="120" y="150" width="22" height="212"/><rect x="160" y="150" width="10" height="212"/><rect x="190" y="150" width="30" height="212"/><rect x="240" y="150" width="12" height="212"/><rect x="272" y="150" width="26" height="212"/><rect x="318" y="150" width="10" height="212"/><rect x="348" y="150" width="44" height="212"/></g><rect x="100" y="246" width="312" height="10" rx="5" fill="#e0452f"/></svg>
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1815">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<title>بوابة الدخول - فحص الدعوات</title>
+<!-- مكتبة بديلة للمتصفحات التي لا تدعم BarcodeDetector (مثل iPhone / Safari / Firefox) -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:Tahoma,"Segoe UI",Arial,sans-serif;background:#0d1815;color:#eef5f2;display:flex;flex-direction:column;overflow:hidden;user-select:none}
+header{display:flex;align-items:center;gap:10px;padding:12px 14px;padding-top:max(12px,env(safe-area-inset-top));background:#14261f;border-bottom:1px solid #2c4a42}
+header h1{font-size:1.05rem;margin:0;flex:1}
+.count{background:#3fbf9b;color:#06201a;font-weight:700;border-radius:99px;padding:4px 14px;font-size:1.05rem}
+.ib{background:none;border:1px solid #2c4a42;color:#eef5f2;border-radius:10px;padding:8px 10px;font:inherit;cursor:pointer}
+.ib:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #f0c35c;outline-offset:2px}
+
+#stage{position:relative;flex:1;min-height:0;background:#000}
+video{width:100%;height:100%;object-fit:cover;display:block}
+.frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.box{position:relative;width:min(86%,520px);height:34%;border-radius:18px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45)}
+.box::before,.box::after{content:"";position:absolute;width:34px;height:34px;border:4px solid #3fbf9b;animation:pulse 1.6s ease-in-out infinite}
+.box::before{top:0;right:0;border-left:0;border-bottom:0;border-top-right-radius:18px}
+.box::after{bottom:0;left:0;border-right:0;border-top:0;border-bottom-left-radius:18px}
+.box i{position:absolute;left:8px;right:8px;height:3px;background:#e0452f;box-shadow:0 0 12px #e0452f;animation:scan 2s ease-in-out infinite}
+@keyframes scan{0%,100%{top:8%}50%{top:90%}}
+@keyframes pulse{50%{opacity:.35}}
+#msg{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:.95rem;text-shadow:0 1px 4px #000}
+
+#ov{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;animation:in .25s ease-out}
+#ov.on{display:flex}
+@keyframes in{from{opacity:0;transform:scale(1.06)}}
+#ov.ok{background:#0f6b43}#ov.er{background:#8e241c}#ov.wr{background:#8a6410}
+#ov .ic{font-size:5rem;line-height:1}
+#ov .t{font-size:1.3rem;font-weight:700;margin-top:8px}
+#ov .n{font-size:2.2rem;font-weight:700;margin:14px 0;line-height:1.6;word-break:break-word}
+#ov small{font-size:1rem;opacity:.9}
+
+footer{background:#14261f;border-top:1px solid #2c4a42;padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.manual{display:flex;gap:8px}
+.manual input{flex:1;min-width:0;font:inherit;padding:10px;border-radius:10px;border:1px solid #2c4a42;background:#0d1815;color:#eef5f2;direction:ltr;text-align:left;user-select:text}
+.manual button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:10px 16px;background:#3fbf9b;color:#06201a;cursor:pointer}
+#recent{margin:8px 0 0;font-size:.85rem;color:#9bb3ab;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+#panel{position:fixed;inset:0;background:#0d1815;z-index:10;display:none;flex-direction:column;padding:16px;padding-top:max(16px,env(safe-area-inset-top))}
+#panel.on{display:flex}
+#panel .top{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+#panel .top h2{flex:1;margin:0;font-size:1.1rem;min-width:120px}
+#list{flex:1;overflow:auto;list-style:none;margin:0;padding:0}
+#list li{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #2c4a42}
+#list .s{color:#9bb3ab;font-size:.82rem;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <h1>بوابة الدخول</h1>
+  <span class="count" id="cnt" title="عدد الداخلين">0</span>
+  <button class="ib" id="lst" aria-label="قائمة الداخلين">القائمة</button>
+  <button class="ib" id="fs" aria-label="ملء الشاشة">⛶</button>
+</header>
+
+<div id="stage">
+  <video id="vid" playsinline muted></video>
+  <div class="frame"><div class="box"><i></i></div></div>
+  <div id="msg">جارٍ تشغيل الكاميرا...</div>
+  <div id="ov"></div>
+</div>
+
+<footer>
+  <div class="manual">
+    <input id="cd" type="text" placeholder="إدخال يدوي: INV.xxxx.XXXX" autocomplete="off">
+    <button id="go">تحقق</button>
+  </div>
+  <div id="recent"></div>
+</footer>
+
+<div id="panel">
+  <div class="top">
+    <h2 id="ph"></h2>
+    <button class="ib" id="csv">تصدير CSV</button>
+    <button class="ib" id="rst">تصفير</button>
+    <button class="ib" id="cls">إغلاق</button>
+  </div>
+  <ul id="list"></ul>
+</div>
+
+<script>
+// ⚠️ يجب أن يطابق المفتاح في تطبيق الدعوة تمامًا
+const SECRET = "party-cf7a456b561f855c";
+
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---------- قراءة الكود والتحقق ---------- */
+function hash(s) {
+  let x = 2166136261;
+  for (const c of s) { x ^= c.charCodeAt(0); x = Math.imul(x, 16777619) >>> 0; }
+  return x.toString(36).toUpperCase().padStart(4, "0").slice(-4);
+}
+function fromB64(b) {
+  b = b.replace(/-/g, "+").replace(/_/g, "/"); while (b.length % 4) b += "=";
+  const bin = atob(b), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return new TextDecoder("utf-8", { fatal: true }).decode(u);
+}
+function readCode(code) {
+  const m = /^INV\.([A-Za-z0-9_-]+)\.([0-9A-Z]{4})$/.exec(code.trim());
+  if (!m || hash(m[1] + SECRET) !== m[2]) return null;
+  try { return fromB64(m[1]); } catch (e) { return null; }
+}
+
+/* ---------- حفظ الدخول على الجهاز ---------- */
+const KEY = "gate_v2";
+let guests = {};
+try { guests = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(guests)); } catch (e) {} };
+const time = t => new Date(t).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" });
+
+function refresh() {
+  const v = Object.values(guests).sort((a, b) => b.last - a.last);
+  $("cnt").textContent = v.length;
+  $("recent").textContent = v.length ? "آخر الداخلين: " + v.slice(0, 3).map(g => g.name).join(" • ") : "لم يدخل أحد بعد";
+}
+
+/* ---------- صوت واهتزاز ---------- */
+let actx;
+function beep(kind) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const seq = kind === "ok" ? [[880, .12], [1320, .18]] : kind === "wr" ? [[660, .15], [660, .15]] : [[200, .45]];
+    let t = actx.currentTime;
+    seq.forEach(([f, d]) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = f; o.type = kind === "er" ? "sawtooth" : "sine";
+      g.gain.setValueAtTime(.25, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d); t += d + .03;
+    });
+  } catch (e) {}
+  try { navigator.vibrate && navigator.vibrate(kind === "ok" ? 80 : [120, 60, 120]); } catch (e) {}
+}
+
+/* ---------- معالجة كل مسح ---------- */
+let lastCode = "", lastAt = 0, hideT = 0;
+function flash(cls, ic, title, name, sub) {
+  const o = $("ov");
+  o.className = "on " + cls;
+  o.innerHTML = `<div class="ic">${ic}</div><div class="t">${title}</div>${name ? `<div class="n">${esc(name)}</div>` : ""}<small>${sub}</small>`;
+  clearTimeout(hideT); hideT = setTimeout(() => { o.className = ""; }, 2600);
+}
+function handle(code) {
+  const now = Date.now();
+  if (code === lastCode && now - lastAt < 4000) return;     // تجاهل نفس القراءة المتكررة
+  lastCode = code; lastAt = now;
+  const name = readCode(code);
+  if (!name) { beep("er"); return flash("er", "✕", "باركود غير صادر من تطبيق الدعوة", "", "غير صالح — لا تسمح بالدخول"); }
+  const g = guests[code];
+  if (!g) {
+    guests[code] = { name, first: now, last: now, n: 1 }; save(); refresh(); beep("ok");
+    flash("ok", "✓", "أهلًا وسهلًا — يُسمح بالدخول", name, "تم تسجيل الدخول " + time(now));
+  } else {
+    g.n++; g.last = now; save(); refresh(); beep("wr");
+    flash("wr", "⚠", "سبق دخوله", name, `دخل أول مرة ${time(g.first)} — عدد المحاولات ${g.n}`);
+  }
+}
+
+/* ---------- الكاميرا (أصلي أو ZXing) ---------- */
+let stream = null, raf = 0, zx = null;
+const msg = t => { $("msg").textContent = t; };
+
+async function startNative() {
+  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } } });
+  const v = $("vid"); v.srcObject = stream; await v.play();
+  const d = new BarcodeDetector({ formats: ["code_128"] });
+  let busy = false;
+  const loop = async () => {
+    if (!busy && v.readyState >= 2) { busy = true; try { const r = await d.detect(v); if (r.length) handle(r[0].rawValue); } catch (e) {} busy = false; }
+    raf = setTimeout(loop, 120);
+  };
+  loop();
+}
+function startZX() {
+  if (!window.ZXing) throw new Error("zxing");
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128]);
+  zx = new ZXing.BrowserMultiFormatReader(hints, 250);
+  zx.decodeFromVideoDevice(null, "vid", res => { if (res) handle(res.getText()); });
+}
+async function start() {
+  if (!navigator.mediaDevices || !window.isSecureContext) { msg("الكاميرا تحتاج https أو localhost — استخدم الإدخال اليدوي"); return; }
+  try {
+    if ("BarcodeDetector" in window) await startNative(); else startZX();
+    msg("وجّه الباركود نحو الإطار");
+  } catch (e) { msg("تعذر تشغيل الكاميرا — امنح الإذن أو استخدم الإدخال اليدوي"); }
+}
+start();
+
+/* إبقاء الشاشة مضاءة */
+let wl; async function keepAwake() { try { wl = await navigator.wakeLock.request("screen"); } catch (e) {} }
+keepAwake(); document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") keepAwake(); });
+
+/* ---------- الإدخال اليدوي ---------- */
+$("go").onclick = () => { const v = $("cd").value.trim(); if (v) { lastCode = ""; handle(v); $("cd").value = ""; } };
+$("cd").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+$("fs").onclick = () => { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.(); };
+
+/* ---------- قائمة الداخلين ---------- */
+function openList() {
+  const v = Object.values(guests).sort((a, b) => b.first - a.first);
+  $("ph").textContent = `الداخلون (${v.length})`;
+  $("list").innerHTML = v.length ? v.map(g => `<li><span>${esc(g.name)}</span><span class="s">${time(g.first)}${g.n > 1 ? " · محاولات " + g.n : ""}</span></li>`).join("") : `<li>لا يوجد داخلون بعد</li>`;
+  $("panel").classList.add("on");
+}
+$("lst").onclick = openList;
+$("cls").onclick = () => $("panel").classList.remove("on");
+$("rst").onclick = () => { if (confirm("مسح قائمة الداخلين بالكامل؟")) { guests = {}; save(); refresh(); openList(); } };
+$("csv").onclick = () => {
+  const rows = [["الاسم", "وقت أول دخول", "عدد المحاولات"], ...Object.values(guests).sort((a, b) => a.first - b.first).map(g => [g.name, new Date(g.first).toLocaleString("ar"), g.n])];
+  const csv = "\ufeff" + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = "guests.csv"; a.click();
+};
+
+refresh();
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
+
+{
+  "name": "بوابة الدخول - فحص الدعوات",
+  "short_name": "بوابة الدخول",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#0d1815",
+  "theme_color": "#0d1815",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
+
+// يجعل التطبيق يعمل بدون إنترنت بعد أول فتح (شبكة أولًا ثم الذاكرة)
+const C = "gate-v2";
+self.addEventListener("install", e => { e.waitUntil(caches.open(C).then(c => c.addAll(["./", "manifest.json", "icon.svg"]))); self.skipWaiting(); });
+self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
+self.addEventListener("fetch", e => {
+  if (e.request.method !== "GET") return;
+  e.respondWith(
+    fetch(e.request).then(r => { const cp = r.clone(); caches.open(C).then(c => c.put(e.request, cp)); return r; })
+      .catch(() => caches.match(e.request))
+  );
+});
